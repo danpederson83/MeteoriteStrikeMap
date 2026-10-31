@@ -3,5 +3,5 @@ services:
     build: .
     container_name: meteorite-map
     ports:
-      - "8080:80"
+      - "8092:80"
     restart: unless-stopped

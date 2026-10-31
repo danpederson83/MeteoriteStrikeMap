@@ -32,7 +32,7 @@ With Docker:
 docker compose up -d --build
 ```
 
-Then open `http://<your-server>:8080`. To use a different port, change `8080` in
+Then open `http://<your-server>:8092`. To use a different port, change `8092` in
 `docker-compose.yml`.
 
 Without Docker, it's a plain static site. Point any web server at the `public/`
