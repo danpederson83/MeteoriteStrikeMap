@@ -7,6 +7,7 @@ export const CONFIG = {
   styleUrl: "https://tiles.openfreemap.org/styles/liberty",
 
   dataUrl: "data/meteorites.geojson",
+  cratersUrl: "data/craters.geojson",
 
   // Where the map starts (longitude, latitude).
   startCenter: [10, 25],

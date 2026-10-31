@@ -3,20 +3,25 @@
 An interactive world map of meteorites that have landed on Earth, made for kids
 doing school projects. Pan and zoom like Google Maps, spin the 3D globe, and tap a
 meteorite to see what it's made of, how heavy it is, when it fell, and its story
-if it's a famous one.
+if it's a famous one. Impact craters are on the map too.
 
 ## Features
 
 - **50,951 meteorites** with known locations, colored by kind: stony, iron,
   stony-iron, from Mars, and from the Moon.
-- **"Seen falling" filter.** Show only the ~1,100 meteorites people actually saw
+- **"Seen falling" filter.** Show only the ~1,200 meteorites people actually saw
   come down, or show all of them.
 - **Kid-friendly sidebar.** Weight compared to everyday things ("about as heavy as
   6 pineapples"), "how many years ago", and plain-language explanations of
   meteorite types.
-- **⭐ Famous meteorites** with short stories: Hoba, Chelyabinsk, the Alabama
+- **💥 190 impact craters** (brown rings) from the Earth Impact Database. Tap one
+  to see how wide it is ("it would take about 51 minutes to walk across"), how old
+  it is and what was living then ("Dinosaurs were alive then!"). A dashed circle
+  shows the crater's real size on the map. Turn craters on or off under "Also show".
+- **⭐ Famous meteorites and craters** with short stories: Hoba, Chelyabinsk, the Alabama
   meteorite that hit a woman on her couch, the one that hit a car in New York, and
-  more.
+  more. Famous craters include Chicxulub (the dinosaur one), Meteor Crater,
+  Vredefort and the town built inside the Ries crater.
 - **📚 Learn** panel: meteoroid vs. meteor vs. meteorite, where they come from, and
   why so many are found in Antarctica.
 - Filters for size and year, plus search by name.
@@ -61,6 +66,16 @@ that turned out not to be meteorites, doubtful or discredited claims, and crater
 with no meteorite found. It also drops "Meridiani Planum", which was found on Mars
 by a rover. If a newer copy of MetBull gets posted, change `SOURCE` in the script
 (or pass `--csv`) and rerun it.
+
+### Impact craters
+
+`build_data.py` also writes `public/data/craters.geojson`. The craters, their
+locations and ages come from the Earth Impact Database (EIDB), which is included
+in the Meteoritical Bulletin data. Diameters come from Wikipedia's
+[List of impact structures on Earth](https://en.wikipedia.org/wiki/List_of_impact_structures_on_Earth),
+which the script downloads, plus a few hand-copied values for craters missing from
+that list (see `scripts/craters.py`). The EIDB rounds many locations, so a crater's
+dashed size circle can sit a little off from the real crater on the map.
 
 Things worth knowing for a presentation:
 

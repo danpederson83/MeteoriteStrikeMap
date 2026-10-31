@@ -143,13 +143,22 @@ export const LEARN_HTML = `
      A few came from the <b>Moon</b> or from <b>Mars</b>!</p>
   <h2>"Seen falling" vs. "found"</h2>
   <p><b>👀 Seen falling</b> means people saw it come down, so we know exactly when it landed.
-     Only about 1,100 meteorites in this map were seen falling!</p>
+     Only about 1,200 meteorites in this map were seen falling!</p>
   <p><b>🔍 Found</b> means someone found it on the ground later. It might have landed
      hundreds or thousands of years before.</p>
   <h2>Why are so many in Antarctica and deserts?</h2>
   <p>Dark rocks are easy to spot on white ice or tan sand. In Antarctica, moving ice
      even carries meteorites to the same places. Scientists go there on expeditions
      just to collect them. Try zooming in on Antarctica!</p>
+  <h2>💥 Impact craters</h2>
+  <p>When a really big space rock hits the ground, it doesn't just land. It hits so fast
+     that it blasts out a giant hole called an <b>impact crater</b>, usually many times
+     wider than the rock itself. The rock itself often vaporizes in the blast!</p>
+  <p>The <b>brown rings</b> on the map are the 190 craters scientists have confirmed on Earth.
+     Most are millions of years old. Wind, rain, ice and plants wear craters away or bury them,
+     so many are hard to see today. Scientists find them by looking for clues like
+     <b>shatter cones</b>, rocks with cone-shaped cracks that only form in a huge impact.</p>
+  <p>The Moon is covered in craters because it has no wind, rain or plants to erase them.</p>
   <h2>Fun facts</h2>
   <ul class="learn-list">
     <li>Scientists estimate about <b>17,000</b> meteorites land on Earth every year. Most fall in the ocean or where no one lives.</li>
@@ -158,3 +167,98 @@ export const LEARN_HTML = `
     <li>Meteorites are some of the <b>oldest rocks</b> you can touch, about 4.5 billion years old!</li>
   </ul>
 `;
+
+// ---- Impact craters ----------------------------------------------------------
+export const CRATER_COLOR = "#7c2d12";
+
+export function formatDiameter(km) {
+  if (km == null) return "Unknown";
+  if (km < 1) {
+    const m = km * 1000;
+    return `${Math.round(m).toLocaleString()} meters (${Math.round(m * 3.28084).toLocaleString()} feet)`;
+  }
+  const mi = km * 0.621371;
+  const f = (x) => x.toLocaleString(undefined, { maximumFractionDigits: x < 10 ? 1 : 0 });
+  return `${f(km)} km (${f(mi)} miles)`;
+}
+
+function plural(n, one, many) { return `${n.toLocaleString()} ${n === 1 ? one : many}`; }
+
+function duration(hours) {
+  if (hours < 1) return plural(Math.max(1, Math.round(hours * 60)), "minute", "minutes");
+  return plural(Math.round(hours), "hour", "hours");
+}
+
+export function craterSizeCompare(km) {
+  if (km == null) return null;
+  const m = km * 1000;
+  if (m < 60) {
+    const n = Math.round(m / 12);
+    return n <= 1 ? "about as wide as a school bus is long" : `about as wide as ${n} school buses parked end to end`;
+  }
+  if (m < 2000) {
+    const n = Math.round(m / 110);
+    return n <= 1 ? "about as wide as a football field is long" : `about as wide as ${n} football fields lined up end to end`;
+  }
+  if (km < 20) return `It would take about ${duration(km / 4)} to walk across`;
+  return `A car on the highway would take about ${duration(km / 100)} to drive across`;
+}
+
+function years(y) {
+  const n = (x, d) => x.toLocaleString(undefined, { maximumFractionDigits: d });
+  if (y >= 1e9) return `${n(y / 1e9, 2)} billion years`;
+  if (y >= 1e6) return `${n(y / 1e6, y < 1e7 ? 1 : 0)} million years`;
+  return `${n(Math.round(y / 100) * 100 || y, 0)} years`;
+}
+
+// age = {q: "about"|"lt"|"gt"|"range"|"fell", y, y2?, maybe?} (see scripts/craters.py)
+export function formatAge(age, thisYear) {
+  if (!age) return { main: "Unknown" };
+  switch (age.q) {
+    case "fell": return {
+      main: `${age.maybe ? "Maybe in " : "In "}${age.y}`,
+      sub: `People saw the meteorite fall, about ${plural(thisYear - age.y, "year", "years")} ago.`,
+    };
+    case "lt": return { main: `Less than ${years(age.y)} ago` };
+    case "gt": return { main: `More than ${years(age.y)} ago` };
+    case "range": return { main: `Between ${years(age.y).replace(/ years$/, "")} and ${years(age.y2)} ago` };
+    default: return { main: `About ${years(age.y)} ago` };
+  }
+}
+
+const ERAS = [
+  [3e5, "🧍 Humans were already living on Earth then."],
+  [2.6e6, "🦣 This was during the Ice Age era, the time of mammoths and saber-toothed cats."],
+  [66e6, "🐘 The dinosaurs were already gone. Mammals ruled the land."],
+  [230e6, "🦖 Dinosaurs were alive then!"],
+  [540e6, "🐟 This was before the dinosaurs. Most life was fish and other sea creatures, with the first plants and animals moving onto land."],
+  [Infinity, "🦠 This was before there were animals with shells or bones. Most life was tiny creatures in the sea."],
+];
+
+// What was living on Earth then, if we can tell from the age.
+export function eraNote(age) {
+  if (!age || age.q === "fell") return null;
+  const lo = age.q === "lt" ? 0 : age.y;
+  const hi = age.q === "gt" ? Infinity : age.q === "range" ? age.y2 : age.y;
+  const band = (y) => ERAS.findIndex(([top]) => y < top || top === Infinity);
+  return band(lo) === band(hi) ? ERAS[band(lo)][1] : null;
+}
+
+// Stories keyed by the crater name shown on the map. These also fill the
+// "Famous craters" list.
+export const CRATER_STORIES = {
+  "Chicxulub": "This is the crater from the asteroid that wiped out the dinosaurs! About 66 million years ago, a space rock about 10 km (6 miles) wide slammed into what is now Mexico. Dust and smoke blocked the Sun around the world. The crater is buried under the ground and the sea today, but scientists found it by measuring the rocks underneath.",
+  "Meteor Crater (Barringer)": "One of the best-kept craters on Earth, in the Arizona desert. An iron meteorite about 50 meters (160 feet) wide made it about 50,000 years ago. A man named Daniel Barringer spent years drilling, hoping to find a giant iron meteorite underneath, but most of it had vaporized in the blast. Apollo astronauts trained here before going to the Moon!",
+  "Vredefort": "The biggest impact crater ever found on Earth, in South Africa. It is about 2 billion years old, so old that most of it has worn away, and it was even bigger when it formed. It is a UNESCO World Heritage Site.",
+  "Sudbury": "A giant, very old crater in Canada, almost 2 billion years old. The impact brought up metals like nickel and copper, and people have mined them here for more than 100 years. Apollo astronauts came here to study impact rocks.",
+  "Nördlinger Ries": "About 15 million years ago, an asteroid hit what is now Germany. Today a whole town, Nördlingen, sits inside the crater. Its church was built from rock made by the impact, and that rock has millions of tiny diamonds in it, too small to see!",
+  "Manicouagan": "A ring-shaped lake in Quebec, Canada, about 100 km (60 miles) wide. The crater is about 214 million years old. It's so big and round that astronauts can easily see it from space. Some people call it the \"Eye of Quebec\".",
+  "Chesapeake Bay": "About 35 million years ago, a space rock hit the ocean near what is now Virginia. The crater is buried deep under the mud, and it helped decide where Chesapeake Bay formed. Scientists only found it in the 1990s.",
+  "Carancas": "On September 15, 2007, people in a village in Peru saw a fireball and heard a huge boom. A stony meteorite blasted a crater about 13 meters (45 feet) wide, and it filled with bubbling water. It's one of the only times people have watched a crater being made.",
+  "Wabar": "Craters in the sandy desert of Saudi Arabia. In 1932, an explorer searching for a legendary lost city found them instead, surrounded by black glass and chunks of iron. Moving sand dunes keep burying them.",
+  "Lonar": "A crater lake in India made about 50,000 years ago. Its water is salty, and in 2020 the whole lake turned pink almost overnight because of tiny living things in the water!",
+  "Kaali": "Thousands of years ago, a meteorite broke apart over an island in Estonia and made nine craters. The biggest one is now a round pond. People already lived there, so some may have seen it happen. It might even be remembered in old legends.",
+  "Pingualuit (New Quebec)": "A perfectly round lake in northern Canada, about 1.4 million years old. Its water is some of the clearest in the world. Because it is so deep and has no river flowing in, scientists study its mud to learn about the Ice Ages.",
+  "Gosses Bluff": "A ring of hills in the middle of Australia, made by an impact about 142 million years ago. To the Western Arrernte people it is Tnorala, a sacred place. In their story, a baby fell from the sky here in a wooden dish.",
+  "Sikhote-Alin": "When the Sikhote-Alin meteorite fell in Russia in 1947, its iron pieces made more than 100 craters in the forest. The biggest is about 26 meters (85 feet) wide. Look for the Sikhote-Alin meteorite on the map too!",
+};

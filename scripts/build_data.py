@@ -8,6 +8,8 @@ copy of it published on Kaggle (scraped October 2024, no login needed):
 https://www.kaggle.com/datasets/sweeteyesbirb/meteoritical-bulletin-dataset
 If a newer copy shows up, point SOURCE at it (or use --csv) and rerun.
 
+It also writes craters.geojson next to the meteorites (see craters.py).
+
 Usage:
     python3 scripts/build_data.py                 # download and build
     python3 scripts/build_data.py --csv file.csv  # build from a local CSV
@@ -24,6 +26,8 @@ import sys
 import urllib.request
 import zipfile
 from pathlib import Path
+
+from craters import build_craters, fetch_wiki_rows
 
 SOURCE = "https://www.kaggle.com/api/v1/datasets/download/sweeteyesbirb/meteoritical-bulletin-dataset"
 CSV_NAME = "meteoritical_bulletin_data_final.csv"  # file inside the zip
@@ -148,7 +152,8 @@ def main():
     ap.add_argument("--out", default=str(OUT), help=f"output file (default {OUT})")
     args = ap.parse_args()
 
-    geo, skipped = build(load_csv(args.csv))
+    text = load_csv(args.csv)
+    geo, skipped = build(text)
     out = Path(args.out)
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(json.dumps(geo, separators=(",", ":"), ensure_ascii=False), encoding="utf-8")
@@ -157,6 +162,11 @@ def main():
     print(f"Wrote {len(geo['features']):,} meteorites ({fell:,} seen falling) to {out}", file=sys.stderr)
     for reason, n in skipped.items():
         print(f"  skipped {n:,}: {reason}", file=sys.stderr)
+
+    craters = build_craters(csv.DictReader(io.StringIO(text)), fetch_wiki_rows())
+    cout = out.with_name("craters.geojson")
+    cout.write_text(json.dumps(craters, separators=(",", ":"), ensure_ascii=False), encoding="utf-8")
+    print(f"Wrote {len(craters['features']):,} impact craters to {cout}", file=sys.stderr)
 
 
 if __name__ == "__main__":

@@ -27,7 +27,7 @@
     </button>
     <div class="filters-body">
       <div class="search">
-        <input id="search" type="search" placeholder="Find a meteorite by name…" autocomplete="off" aria-label="Search by name">
+        <input id="search" type="search" placeholder="Find a meteorite or crater…" autocomplete="off" aria-label="Search by name">
         <ul id="search-results" class="search-results" hidden></ul>
       </div>
 
@@ -38,6 +38,12 @@
 
       <div class="field-label">Kind of meteorite <span class="hint">(tap to turn on/off)</span></div>
       <div id="kind-chips" class="chips"></div>
+
+      <div class="field-label">Also show</div>
+      <div class="chips">
+        <button id="crater-chip" class="chip on" aria-pressed="true" title="Giant holes made when big space rocks hit the ground">
+          <span class="dot ring-dot"></span>💥 Impact craters</button>
+      </div>
 
       <label class="field-label" for="size">Size</label>
       <select id="size">
@@ -64,6 +70,7 @@
         <div><span class="ring-demo"></span> White ring = people saw it fall</div>
         <div><span class="size-demo"></span> Bigger dot = heavier meteorite</div>
         <div><span class="cluster-demo">12</span> Bubble = a group. Tap to zoom in.</div>
+        <div><span class="crater-demo"></span> Brown ring = impact crater</div>
       </div>
     </div>
   </section>

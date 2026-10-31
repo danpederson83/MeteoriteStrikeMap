@@ -1,5 +1,8 @@
 import { CONFIG } from "./config.js";
-import { KINDS, FAMOUS, LEARN_HTML, classNote, heatNote, massCompare, formatMass } from "./kidfacts.js";
+import {
+  KINDS, FAMOUS, LEARN_HTML, classNote, heatNote, massCompare, formatMass,
+  CRATER_COLOR, CRATER_STORIES, formatDiameter, craterSizeCompare, formatAge, eraNote,
+} from "./kidfacts.js";
 
 const $ = (id) => document.getElementById(id);
 const THIS_YEAR = new Date().getFullYear();
@@ -12,7 +15,10 @@ const state = {
   minMass: 0,
   yearFrom: null,
   yearTo: null,
-  selectedId: null,
+  craters: [],             // impact craters (not filtered by the meteorite filters)
+  craterById: new Map(),
+  showCraters: true,
+  selected: null,          // { type: "m" | "c", id }
   globe: CONFIG.startGlobe,
 };
 
@@ -86,6 +92,8 @@ map.on("load", async () => {
     promoteId: "id",
   });
   map.addSource("selected", { type: "geojson", data: { type: "FeatureCollection", features: [] } });
+  map.addSource("craters", { type: "geojson", data: { type: "FeatureCollection", features: [] }, promoteId: "id" });
+  map.addSource("crater-size", { type: "geojson", data: { type: "FeatureCollection", features: [] } });
 
   map.addLayer({
     id: "clusters",
@@ -128,6 +136,35 @@ map.on("load", async () => {
       "circle-stroke-color": ["case", ["==", ["get", "fell"], 1], "#ffffff", "rgba(0,0,0,0.45)"],
     },
   });
+  // The selected crater's real size, drawn to scale (visible when zoomed in).
+  map.addLayer({
+    id: "crater-size-fill",
+    type: "fill",
+    source: "crater-size",
+    paint: { "fill-color": CRATER_COLOR, "fill-opacity": 0.12 },
+  });
+  map.addLayer({
+    id: "crater-size-line",
+    type: "line",
+    source: "crater-size",
+    paint: { "line-color": CRATER_COLOR, "line-width": 3, "line-dasharray": [2, 1.5] },
+  });
+  // Craters: hollow brown rings, bigger for bigger craters.
+  map.addLayer({
+    id: "craters",
+    type: "circle",
+    source: "craters",
+    layout: { "circle-sort-key": ["coalesce", ["get", "diam"], 0] },
+    paint: {
+      "circle-color": "rgba(124,45,18,0.15)",
+      // Smaller when zoomed out, so the world view isn't covered in rings.
+      "circle-radius": ["interpolate", ["linear"], ["zoom"],
+        1, ["interpolate", ["linear"], ["ln", ["*", ["coalesce", ["get", "diam"], 1], 1000]], 2.5, 3.5, 12, 9],
+        6, ["interpolate", ["linear"], ["ln", ["*", ["coalesce", ["get", "diam"], 1], 1000]], 2.5, 6, 7, 10, 12, 20]],
+      "circle-stroke-width": ["interpolate", ["linear"], ["zoom"], 1, 2, 6, 3.5],
+      "circle-stroke-color": CRATER_COLOR,
+    },
+  });
   map.addLayer({
     id: "selected-ring",
     type: "circle",
@@ -152,25 +189,38 @@ function applyProjection() {
 // ---------------------------------------------------------------------------
 // Data
 
+async function fetchGeo(url) {
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return (await res.json()).features;
+}
+
 async function loadData() {
+  // Craters are optional: if they fail to load, the meteorites still work.
+  const cratersP = fetchGeo(CONFIG.cratersUrl).catch((e) => {
+    console.warn("Couldn't load craters:", e);
+    return [];
+  });
   try {
-    const res = await fetch(CONFIG.dataUrl);
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const geo = await res.json();
-    state.all = geo.features;
+    state.all = await fetchGeo(CONFIG.dataUrl);
     for (const f of state.all) state.byId.set(f.properties.id, f);
   } catch (e) {
     showError(`Couldn't load the meteorite data (${e.message}). Did you run scripts/build_data.py?`);
     return;
   }
+  state.craters = await cratersP;
+  for (const f of state.craters) state.craterById.set(f.properties.id, f);
+
   const years = state.all.map((f) => f.properties.year).filter((y) => y != null);
   $("year-from").placeholder = Math.min(...years);
   $("year-to").placeholder = THIS_YEAR;
   applyFilters();
 
-  // Re-open a meteorite from the address bar (e.g. a bookmarked link).
-  const m = new URLSearchParams(location.hash.slice(1)).get("m");
+  // Re-open a meteorite or crater from the address bar (e.g. a bookmarked link).
+  const params = new URLSearchParams(location.hash.slice(1));
+  const m = params.get("m"), c = params.get("c");
   if (m && state.byId.has(+m)) select(+m, { fly: false });
+  else if (c && state.craterById.has(+c)) selectCrater(+c, { fly: false });
 }
 
 function passes(p) {
@@ -185,8 +235,11 @@ function passes(p) {
 function applyFilters() {
   const features = state.all.filter((f) => passes(f.properties));
   map.getSource("meteorites")?.setData({ type: "FeatureCollection", features });
-  const n = features.length;
-  $("count").textContent = `Showing ${n.toLocaleString()} meteorite${n === 1 ? "" : "s"}`;
+  const craters = state.showCraters ? state.craters : [];
+  map.getSource("craters")?.setData({ type: "FeatureCollection", features: craters });
+  const n = features.length, c = craters.length;
+  $("count").textContent = `Showing ${n.toLocaleString()} meteorite${n === 1 ? "" : "s"}`
+    + (c ? ` and ${c} crater${c === 1 ? "" : "s"}` : "");
 }
 
 // ---------------------------------------------------------------------------
@@ -195,25 +248,26 @@ function applyFilters() {
 function wireMapEvents() {
   const hoverPopup = new maplibregl.Popup({ closeButton: false, closeOnClick: false, offset: 12, className: "hover-pop" });
 
-  for (const layer of ["clusters", "points"]) {
+  for (const layer of ["clusters", "points", "craters"]) {
     map.on("mouseenter", layer, () => (map.getCanvas().style.cursor = "pointer"));
     map.on("mouseleave", layer, () => {
       map.getCanvas().style.cursor = "";
       hoverPopup.remove();
     });
   }
-  map.on("mousemove", "points", (e) => {
-    const p = e.features[0].properties;
-    hoverPopup.setLngLat(e.features[0].geometry.coordinates).setText(p.name).addTo(map);
-  });
+  for (const [layer, label] of [["points", (p) => p.name], ["craters", (p) => `💥 ${p.name} crater`]]) {
+    map.on("mousemove", layer, (e) => {
+      const f = e.features[0];
+      hoverPopup.setLngLat(f.geometry.coordinates).setText(label(f.properties)).addTo(map);
+    });
+  }
 
-  map.on("click", "clusters", async (e) => {
-    const f = e.features[0];
-    const zoom = await map.getSource("meteorites").getClusterExpansionZoom(f.properties.cluster_id);
-    map.easeTo({ center: f.geometry.coordinates, zoom: Math.min(zoom + 0.5, 16) });
-  });
+  // One click handler so a crater ring on top of a meteorite dot or a
+  // cluster bubble wins, instead of both opening at once.
+  map.on("click", async (e) => {
+    const crater = map.queryRenderedFeatures(e.point, { layers: ["craters"] })[0];
+    if (crater) { selectCrater(crater.properties.id, { fly: false }); return; }
 
-  map.on("click", "points", (e) => {
     // Several meteorites can sit on the exact same spot (common in Antarctica),
     // so look for everything right around the click.
     const pad = 6;
@@ -221,8 +275,14 @@ function wireMapEvents() {
     const seen = new Set();
     const hits = map.queryRenderedFeatures(box, { layers: ["points"] })
       .filter((f) => !seen.has(f.properties.id) && seen.add(f.properties.id));
-    if (hits.length === 1) select(hits[0].properties.id, { fly: false });
-    else showPicker(hits.map((f) => state.byId.get(f.properties.id)));
+    if (hits.length === 1) { select(hits[0].properties.id, { fly: false }); return; }
+    if (hits.length > 1) { showPicker(hits.map((f) => state.byId.get(f.properties.id))); return; }
+
+    const cluster = map.queryRenderedFeatures(e.point, { layers: ["clusters"] })[0];
+    if (cluster) {
+      const zoom = await map.getSource("meteorites").getClusterExpansionZoom(cluster.properties.cluster_id);
+      map.easeTo({ center: cluster.geometry.coordinates, zoom: Math.min(zoom + 0.5, 16) });
+    }
   });
 }
 
@@ -234,19 +294,66 @@ function flyTo(f) {
 function select(id, { fly = true } = {}) {
   const f = state.byId.get(id);
   if (!f) return;
-  state.selectedId = id;
-  map.getSource("selected").setData({ type: "FeatureCollection", features: [f] });
+  highlight({ type: "m", id }, f);
   showDetails(f);
-  setHashParam("m", id);
   if (fly) flyTo(f);
 }
 
+function selectCrater(id, { fly = true } = {}) {
+  const f = state.craterById.get(id);
+  if (!f) return;
+  highlight({ type: "c", id }, f);
+  const km = f.properties.diam;
+  map.getSource("crater-size").setData({ type: "FeatureCollection", features: km ? [circlePolygon(f.geometry.coordinates, km / 2)] : [] });
+  showCraterDetails(f);
+  if (fly) flyToCrater(f);
+}
+
+function highlight(sel, f) {
+  state.selected = sel;
+  map.getSource("selected").setData({ type: "FeatureCollection", features: [f] });
+  map.getSource("crater-size").setData({ type: "FeatureCollection", features: [] });
+  setHashParam("m", sel.type === "m" ? sel.id : null);
+  setHashParam("c", sel.type === "c" ? sel.id : null);
+}
+
 function clearSelection() {
-  state.selectedId = null;
+  state.selected = null;
   map.getSource("selected")?.setData({ type: "FeatureCollection", features: [] });
+  map.getSource("crater-size")?.setData({ type: "FeatureCollection", features: [] });
   $("sidebar").hidden = true;
   document.body.classList.remove("sidebar-open");
   setHashParam("m", null);
+  setHashParam("c", null);
+}
+
+// A circle of the given radius (km) on the ground, as a polygon.
+function circlePolygon([lon, lat], km, steps = 72) {
+  const R = 6371, d = km / R, la = (lat * Math.PI) / 180, lo = (lon * Math.PI) / 180;
+  const ring = [];
+  for (let i = 0; i <= steps; i++) {
+    const b = (2 * Math.PI * i) / steps;
+    const la2 = Math.asin(Math.sin(la) * Math.cos(d) + Math.cos(la) * Math.sin(d) * Math.cos(b));
+    const lo2 = lo + Math.atan2(Math.sin(b) * Math.sin(d) * Math.cos(la), Math.cos(d) - Math.sin(la) * Math.sin(la2));
+    ring.push([(lo2 * 180) / Math.PI, (la2 * 180) / Math.PI]);
+  }
+  return { type: "Feature", geometry: { type: "Polygon", coordinates: [ring] }, properties: {} };
+}
+
+// Zoom so the whole crater fits on screen, with its real-size outline showing.
+function flyToCrater(f) {
+  const km = f.properties.diam;
+  if (!km) { flyTo(f); return; }
+  const ring = circlePolygon(f.geometry.coordinates, km / 2).geometry.coordinates[0];
+  const lons = ring.map((p) => p[0]), lats = ring.map((p) => p[1]);
+  const bounds = [[Math.min(...lons), Math.min(...lats)], [Math.max(...lons), Math.max(...lats)]];
+  const phone = window.innerWidth <= 700, open = !$("sidebar").hidden;
+  const padding = phone
+    ? { top: 110, left: 30, right: 30, bottom: open ? $("sidebar").offsetHeight + 20 : 60 }
+    : { top: 90, left: 60, bottom: 60, right: open ? 420 : 60 };
+  // On a short screen the padding could leave no room at all; fall back to a plain fly.
+  if (padding.top + padding.bottom > window.innerHeight - 80) { flyTo(f); return; }
+  map.fitBounds(bounds, { padding, maxZoom: 17, speed: 1.4 });
 }
 
 // Keep "m=<id>" alongside MapLibre's "map=..." in the hash.
@@ -307,6 +414,50 @@ function showDetails(f) {
     </div>
   `;
   $("btn-flyto").onclick = () => flyTo(f);
+  $("sidebar").hidden = false;
+  document.body.classList.add("sidebar-open");
+  $("sidebar").scrollTop = 0;
+}
+
+function showCraterDetails(f) {
+  const p = f.properties;
+  const [lon, lat] = f.geometry.coordinates;
+  const story = CRATER_STORIES[p.name];
+  const cmp = craterSizeCompare(p.diam);
+  const age = formatAge(p.age, THIS_YEAR);
+  const era = eraNote(p.age);
+  const wiki = p.wiki
+    ? `https://en.wikipedia.org/wiki/${encodeURIComponent(p.wiki.replace(/ /g, "_"))}`
+    : `https://en.wikipedia.org/w/index.php?search=${encodeURIComponent(p.name + " crater")}`;
+
+  $("sidebar-content").innerHTML = `
+    <div class="kind-banner" style="--kind:${CRATER_COLOR}">
+      <span class="kind-emoji">💥</span> Impact crater
+    </div>
+    <h2 class="m-name">${esc(p.name)}</h2>
+    ${p.place ? `<div class="sub place">📍 ${esc(p.place)}</div>` : ""}
+
+    ${story ? `<div class="story"><div class="story-title">⭐ Famous crater</div><p>${esc(story)}</p></div>` : ""}
+
+    <dl class="facts">
+      <dt>📏 How wide</dt>
+      <dd><b>${esc(formatDiameter(p.diam))}</b>${cmp ? `<div class="sub">${esc(cmp)}${/^about/.test(cmp) ? "!" : "."}</div>` : ""}
+        ${p.diam ? `<div class="sub">The dashed circle on the map shows its real size. Zoom in or out to compare it with towns and roads.</div>` : ""}</dd>
+
+      <dt>📅 When it was made</dt>
+      <dd><b>${esc(age.main)}</b>${age.sub ? `<div class="sub">${esc(age.sub)}</div>` : ""}
+        ${era ? `<div class="sub">${esc(era)}</div>` : ""}</dd>
+
+      <dt>🌍 Location</dt>
+      <dd>${Math.abs(lat).toFixed(3)}° ${lat >= 0 ? "N" : "S"}, ${Math.abs(lon).toFixed(3)}° ${lon >= 0 ? "E" : "W"}</dd>
+    </dl>
+
+    <div class="actions">
+      <button class="btn" id="btn-flyto">🔍 Zoom to it</button>
+      <a class="btn" target="_blank" rel="noopener" href="${wiki}">🌐 Wikipedia</a>
+    </div>
+  `;
+  $("btn-flyto").onclick = () => flyToCrater(f);
   $("sidebar").hidden = false;
   document.body.classList.add("sidebar-open");
   $("sidebar").scrollTop = 0;
@@ -377,11 +528,22 @@ function wireControls() {
       applyFilters();
     };
   }
+  const craterChip = $("crater-chip");
+  craterChip.style.setProperty("--kind", CRATER_COLOR);
+  const setCraters = (on) => {
+    state.showCraters = on;
+    craterChip.classList.toggle("on", on);
+    craterChip.setAttribute("aria-pressed", on);
+    applyFilters();
+  };
+  craterChip.onclick = () => setCraters(!state.showCraters);
+
   $("btn-reset").onclick = () => {
+    setCraters(true);
     state.kinds = new Set(Object.keys(KINDS));
     state.minMass = 0; state.yearFrom = state.yearTo = null;
     $("size").value = "0"; $("year-from").value = ""; $("year-to").value = "";
-    document.querySelectorAll(".chip").forEach((c) => { c.classList.add("on"); c.setAttribute("aria-pressed", "true"); });
+    document.querySelectorAll("#kind-chips .chip").forEach((c) => { c.classList.add("on"); c.setAttribute("aria-pressed", "true"); });
     setFall("all");
   };
 
@@ -421,28 +583,40 @@ function wireSearch() {
   const list = $("search-results");
   let matches = [];
 
+  // Craters are listed first: there are few of them, and "Chicxulub" or
+  // "Meteor Crater" should not get buried under meteorites with similar names.
   const render = () => {
     const q = norm(input.value.trim());
     if (q.length < 2) { list.hidden = true; return; }
     const starts = [], contains = [];
-    for (const f of state.all) {
-      const n = norm(f.properties.name);
-      if (n.startsWith(q)) starts.push(f);
-      else if (n.includes(q)) contains.push(f);
-      if (starts.length >= 10) break;
-    }
+    const scan = (features, crater) => {
+      for (const f of features) {
+        const n = norm(f.properties.name);
+        if (n.startsWith(q)) starts.push({ f, crater });
+        else if (n.includes(q)) contains.push({ f, crater });
+        if (starts.length >= 10) break;
+      }
+    };
+    scan(state.craters, true);
+    scan(state.all, false);
     matches = [...starts, ...contains].slice(0, 10);
     list.innerHTML = matches.length
-      ? matches.map((f, i) => `<li><button data-i="${i}"><span class="dot" style="background:${KINDS[f.properties.kind].color}"></span>${esc(f.properties.name)}
-          <span class="sr-year">${f.properties.year ?? ""}</span></button></li>`).join("")
-      : `<li class="none">No meteorite with that name on the map</li>`;
+      ? matches.map(({ f, crater }, i) => `<li><button data-i="${i}">${crater
+          ? `<span class="dot ring-dot" style="--kind:${CRATER_COLOR}"></span>${esc(f.properties.name)}<span class="sr-year">crater</span>`
+          : `<span class="dot" style="background:${KINDS[f.properties.kind].color}"></span>${esc(f.properties.name)}<span class="sr-year">${f.properties.year ?? ""}</span>`}
+          </button></li>`).join("")
+      : `<li class="none">No meteorite or crater with that name on the map</li>`;
     list.hidden = false;
     list.querySelectorAll("[data-i]").forEach((b) => (b.onclick = () => choose(matches[+b.dataset.i])));
   };
-  const choose = (f) => {
+  const choose = ({ f, crater }) => {
     list.hidden = true;
     input.value = f.properties.name;
-    select(f.properties.id);
+    if (crater) {
+      // Make sure the crater is visible on the map, then go there.
+      if (!state.showCraters) $("crater-chip").click();
+      selectCrater(f.properties.id);
+    } else select(f.properties.id);
   };
 
   input.addEventListener("input", render);
@@ -465,8 +639,11 @@ function closeModal() { $("modal").hidden = true; }
 function openFamous() {
   const famous = state.all.filter((f) => FAMOUS[f.properties.name])
     .sort((a, b) => (b.properties.mass ?? 0) - (a.properties.mass ?? 0));
-  openModal("⭐ Famous meteorites", `
+  const craters = state.craters.filter((f) => CRATER_STORIES[f.properties.name])
+    .sort((a, b) => (b.properties.diam ?? 0) - (a.properties.diam ?? 0));
+  openModal("⭐ Famous meteorites & craters", `
     <p>Tap one to fly there and read its story.</p>
+    <h2>Meteorites</h2>
     <ul class="famous-list">
       ${famous.map((f) => {
         const p = f.properties, k = KINDS[p.kind];
@@ -476,8 +653,24 @@ function openFamous() {
             <span class="sub">${p.fell ? "👀 Seen falling" : "🔍 Found"} · ${p.year ?? "?"} · ${esc(formatMass(p.mass))}</span></span>
         </button></li>`;
       }).join("")}
-    </ul>`);
+    </ul>
+    ${craters.length ? `<h2>Impact craters</h2>
+    <ul class="famous-list">
+      ${craters.map((f) => {
+        const p = f.properties;
+        return `<li><button data-crater="${p.id}">
+          <span class="fam-emoji">💥</span>
+          <span class="fam-main"><b>${esc(p.name)}</b>
+            <span class="sub">${esc(formatDiameter(p.diam))} wide · ${esc(formatAge(p.age, THIS_YEAR).main)}</span></span>
+        </button></li>`;
+      }).join("")}
+    </ul>` : ""}`);
   $("modal-body").querySelectorAll("[data-id]").forEach((b) => (b.onclick = () => { closeModal(); select(+b.dataset.id); }));
+  $("modal-body").querySelectorAll("[data-crater]").forEach((b) => (b.onclick = () => {
+    closeModal();
+    if (!state.showCraters) $("crater-chip").click();
+    selectCrater(+b.dataset.crater);
+  }));
 }
 
 function showError(msg) {
