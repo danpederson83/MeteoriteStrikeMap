@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Meteorite Map</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌠</text></svg>">
+  <link rel="stylesheet" href="vendor/maplibre-gl/maplibre-gl.css">
+  <link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+  <div id="map" aria-label="World map of meteorites"></div>
+
+  <header class="topbar">
+    <h1>🌠 Meteorite Map</h1>
+    <div class="topbar-buttons">
+      <button id="btn-learn" class="btn">📚 Learn</button>
+      <button id="btn-famous" class="btn">⭐ Famous</button>
+      <button id="btn-globe" class="btn" title="Switch between globe and flat map">🗺️ Flat map</button>
+    </div>
+  </header>
+
+  <!-- Filters -->
+  <section id="filters" class="card filters" aria-label="Filters">
+    <button id="filters-toggle" class="filters-toggle" aria-expanded="true">
+      <span>🔎 Search &amp; filters</span><span class="chev">▾</span>
+    </button>
+    <div class="filters-body">
+      <div class="search">
+        <input id="search" type="search" placeholder="Find a meteorite by name…" autocomplete="off" aria-label="Search by name">
+        <ul id="search-results" class="search-results" hidden></ul>
+      </div>
+
+      <div class="seg" role="radiogroup" aria-label="Which meteorites">
+        <button class="seg-btn active" data-fall="all" role="radio" aria-checked="true">🌍 All</button>
+        <button class="seg-btn" data-fall="fell" role="radio" aria-checked="false">👀 Seen falling</button>
+      </div>
+
+      <div class="field-label">Kind of meteorite <span class="hint">(tap to turn on/off)</span></div>
+      <div id="kind-chips" class="chips"></div>
+
+      <label class="field-label" for="size">Size</label>
+      <select id="size">
+        <option value="0">Any size</option>
+        <option value="150">Heavier than an apple 🍎</option>
+        <option value="6000">Heavier than a bowling ball 🎳</option>
+        <option value="40000">Heavier than a 5th grader 🧒</option>
+        <option value="1500000">Heavier than a car 🚗</option>
+      </select>
+
+      <div class="field-label">Year it fell or was found</div>
+      <div class="years">
+        <input id="year-from" type="number" inputmode="numeric" placeholder="from" aria-label="From year">
+        <span>to</span>
+        <input id="year-to" type="number" inputmode="numeric" placeholder="to" aria-label="To year">
+      </div>
+
+      <div class="filters-foot">
+        <span id="count" class="count">Loading…</span>
+        <button id="btn-reset" class="link-btn">Reset</button>
+      </div>
+
+      <div class="legend">
+        <div><span class="ring-demo"></span> White ring = people saw it fall</div>
+        <div><span class="size-demo"></span> Bigger dot = heavier meteorite</div>
+        <div><span class="cluster-demo">12</span> Bubble = a group. Tap to zoom in.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Details sidebar -->
+  <aside id="sidebar" class="sidebar" aria-label="Meteorite details" hidden>
+    <button id="sidebar-close" class="close" aria-label="Close">✕</button>
+    <div id="sidebar-content"></div>
+  </aside>
+
+  <!-- Learn / Famous dialog -->
+  <div id="modal" class="modal" hidden>
+    <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+      <button id="modal-close" class="close" aria-label="Close">✕</button>
+      <h1 id="modal-title"></h1>
+      <div id="modal-body"></div>
+    </div>
+  </div>
+
+  <div id="load-error" class="load-error" hidden></div>
+
+  <script src="vendor/maplibre-gl/maplibre-gl.js"></script>
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>
