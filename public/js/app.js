@@ -165,7 +165,7 @@ async function loadData() {
   }
   const years = state.all.map((f) => f.properties.year).filter((y) => y != null);
   $("year-from").placeholder = Math.min(...years);
-  $("year-to").placeholder = Math.max(...years);
+  $("year-to").placeholder = THIS_YEAR;
   applyFilters();
 
   // Re-open a meteorite from the address bar (e.g. a bookmarked link).
