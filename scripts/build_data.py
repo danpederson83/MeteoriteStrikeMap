@@ -1,9 +1,12 @@
 #!/usr/bin/env python3
-"""Download the Meteorite Landings dataset and turn it into a clean GeoJSON file
-for the map.
+"""Download the Meteoritical Bulletin Database and turn it into a clean GeoJSON
+file for the map.
 
-Data: NASA Open Data Portal "Meteorite Landings" (compiled from the
-Meteoritical Society's Meteoritical Bulletin Database).
+Data: the Meteoritical Society's Meteoritical Bulletin Database (MetBull),
+https://www.lpi.usra.edu/meteor/. MetBull blocks scripts, so this uses a full
+copy of it published on Kaggle (scraped October 2024, no login needed):
+https://www.kaggle.com/datasets/sweeteyesbirb/meteoritical-bulletin-dataset
+If a newer copy shows up, point SOURCE at it (or use --csv) and rerun.
 
 Usage:
     python3 scripts/build_data.py                 # download and build
@@ -16,16 +19,14 @@ import argparse
 import csv
 import io
 import json
+import re
 import sys
 import urllib.request
+import zipfile
 from pathlib import Path
 
-# Tried in order. The NASA URL is the original source; the TidyTuesday copy is
-# an exact mirror of it on GitHub, used if NASA's portal is unreachable.
-SOURCES = [
-    "https://data.nasa.gov/api/views/gh4g-9sfh/rows.csv?accessType=DOWNLOAD",
-    "https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2019/2019-06-11/meteorites.csv",
-]
+SOURCE = "https://www.kaggle.com/api/v1/datasets/download/sweeteyesbirb/meteoritical-bulletin-dataset"
+CSV_NAME = "meteoritical_bulletin_data_final.csv"  # file inside the zip
 
 OUT = Path(__file__).resolve().parent.parent / "public" / "data" / "meteorites.geojson"
 
@@ -33,12 +34,16 @@ OUT = Path(__file__).resolve().parent.parent / "public" / "data" / "meteorites.g
 # Opportunity rover) are left out of an Earth map.
 NOT_ON_EARTH = {"Meridiani Planum"}
 
-LAST_VALID_YEAR = 2026  # the dataset contains at least one typo (year 2101)
+# MetBull statuses we skip: rocks that turned out not to be meteorites
+# ("Pseudo"), doubtful or discredited claims, impact craters with no meteorite
+# found, and records with no paperwork behind them.
+SKIP_STATUS = {"Pseudo", "Doubtful", "Discredited", "Crater", "Undocumented"}
+
+LAST_VALID_YEAR = 2026  # guards against typos in the year column
 
 
 def pick(row, *names):
-    """Return the first non-empty value among several possible column names
-    (NASA's CSV and the mirror use slightly different headers)."""
+    """Return the first non-empty value among several possible column names."""
     for n in names:
         v = row.get(n)
         if v not in (None, "", "NA"):
@@ -60,38 +65,36 @@ def kind_of(recclass):
     return "stony"
 
 
-def fetch(url):
-    print(f"Downloading {url} ...", file=sys.stderr)
-    req = urllib.request.Request(url, headers={"User-Agent": "MeteoriteStrikeMap/1.0"})
-    with urllib.request.urlopen(req, timeout=120) as resp:
-        return resp.read().decode("utf-8-sig")
-
-
 def load_csv(local_path=None):
     if local_path:
         return Path(local_path).read_text(encoding="utf-8-sig")
-    last_err = None
-    for url in SOURCES:
-        try:
-            return fetch(url)
-        except Exception as e:  # try the next mirror
-            print(f"  failed: {e}", file=sys.stderr)
-            last_err = e
-    raise SystemExit(f"Could not download the dataset: {last_err}")
+    print(f"Downloading {SOURCE} ...", file=sys.stderr)
+    req = urllib.request.Request(SOURCE, headers={"User-Agent": "MeteoriteStrikeMap/1.0"})
+    try:
+        with urllib.request.urlopen(req, timeout=300) as resp:
+            data = resp.read()
+    except Exception as e:
+        raise SystemExit(f"Could not download the dataset: {e}")
+    with zipfile.ZipFile(io.BytesIO(data)) as z:
+        return z.read(CSV_NAME).decode("utf-8-sig")
 
 
 def build(text):
     features = []
-    skipped = {"no location": 0, "not on Earth": 0}
+    skipped = {"no location": 0, "not on Earth": 0, "not a real meteorite": 0}
     for row in csv.DictReader(io.StringIO(text)):
-        name = pick(row, "name")
-        lat = pick(row, "reclat", "lat")
-        lon = pick(row, "reclong", "long")
+        status = pick(row, "Status") or ""
+        if status in SKIP_STATUS:
+            skipped["not a real meteorite"] += 1
+            continue
+        name = pick(row, "Name")
+        lat = pick(row, "Latitude")
+        lon = pick(row, "Longitude")
         if not name or lat is None or lon is None:
             skipped["no location"] += 1
             continue
         lat, lon = float(lat), float(lon)
-        # 0,0 is a placeholder for "unknown location" in this dataset.
+        # 0,0 is a placeholder for "unknown location".
         if lat == 0 and lon == 0:
             skipped["no location"] += 1
             continue
@@ -99,33 +102,39 @@ def build(text):
             skipped["not on Earth"] += 1
             continue
 
-        mass = pick(row, "mass (g)", "mass")
-        mass = float(mass) if mass is not None else None
+        # MetBull lists mass in kilograms; the app uses grams.
+        mass = pick(row, "Mass(kg)")
+        mass = round(float(mass) * 1000, 2) if mass is not None else None
         if mass is not None and mass.is_integer():
             mass = int(mass)
 
-        year = pick(row, "year")
-        if year is not None:
-            # NASA's CSV has full timestamps ("01/01/1880 12:00:00 AM").
-            year = int(year[6:10]) if "/" in year else int(float(year))
-            if year > LAST_VALID_YEAR:
-                year = None
+        year = pick(row, "Year-Only")
+        year = int(year) if year and re.fullmatch(r"\d{3,4}", year) else None
+        if year is not None and year > LAST_VALID_YEAR:
+            year = None
 
-        recclass = pick(row, "recclass", "class") or "Unknown"
-        fall = pick(row, "fall") or "Found"
+        # The record ID is the "code" in MetBull's link; it matches the IDs in
+        # the older NASA dataset, so existing links keep working.
+        rid = re.search(r"code=(\d+)", pick(row, "Link") or "")
+        if not rid:
+            skipped["no location"] += 1
+            continue
+
+        recclass = pick(row, "Type") or "Unknown"
+        fall = pick(row, "Fall") or "Found"
 
         features.append({
             "type": "Feature",
             "geometry": {"type": "Point", "coordinates": [round(lon, 5), round(lat, 5)]},
             "properties": {
-                "id": int(pick(row, "id")),
+                "id": int(rid.group(1)),
                 "name": name,
                 "class": recclass,
                 "kind": kind_of(recclass),
                 "mass": mass,
-                "fell": 1 if fall == "Fell" else 0,
+                "fell": 1 if fall.startswith("Fell") else 0,
                 "year": year,
-                "relict": 1 if pick(row, "nametype", "name_type") == "Relict" else 0,
+                "relict": 1 if status.startswith("Relict") else 0,
             },
         })
 

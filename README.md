@@ -7,7 +7,7 @@ if it's a famous one.
 
 ## Features
 
-- **32,186 meteorites** with known locations, colored by kind: stony, iron,
+- **50,951 meteorites** with known locations, colored by kind: stony, iron,
   stony-iron, from Mars, and from the Moon.
 - **"Seen falling" filter.** Show only the ~1,100 meteorites people actually saw
   come down, or show all of them.
@@ -44,26 +44,31 @@ python3 -m http.server 8080 --directory public
 
 ## Where the data comes from
 
-[NASA's Meteorite Landings dataset](https://data.nasa.gov/dataset/meteorite-landings),
-compiled from the Meteoritical Society's
-[Meteoritical Bulletin Database](https://www.lpi.usra.edu/meteor/). The cleaned
-file is already in `public/data/meteorites.geojson`. To rebuild it:
+The Meteoritical Society's
+[Meteoritical Bulletin Database](https://www.lpi.usra.edu/meteor/) (MetBull),
+via a [full copy on Kaggle](https://www.kaggle.com/datasets/sweeteyesbirb/meteoritical-bulletin-dataset)
+made in October 2024. MetBull itself blocks scripts, and NASA's older copy stops
+in 2013. The cleaned file is already in `public/data/meteorites.geojson`. To
+rebuild it:
 
 ```bash
 python3 scripts/build_data.py
 ```
 
-The script tries NASA first and falls back to an identical mirror on GitHub. It
-drops records with no usable location: about 13,500 have none, or a 0,0
-placeholder. It also drops "Meridiani Planum", which was found on Mars by a rover.
+The script downloads the Kaggle copy (no login needed). It drops records with no
+usable location (about 32,000, mostly small Antarctic and desert finds), rocks
+that turned out not to be meteorites, doubtful or discredited claims, and craters
+with no meteorite found. It also drops "Meridiani Planum", which was found on Mars
+by a rover. If a newer copy of MetBull gets posted, change `SOURCE` in the script
+(or pass `--csv`) and rerun it.
 
 Things worth knowing for a presentation:
 
-- The NASA dataset covers meteorites through 2013. Newer finds are in the
+- The data covers meteorites through 2024. Even newer finds are in the
   Meteoritical Bulletin Database, which each sidebar links to ("Science record").
 - "Found" meteorites can have landed long before the year they were found.
-- Ensisheim is listed as 1491 in the data, but history books say 1492. Even
-  scientific records have mistakes!
+- Ribbeck (Germany, 2024) and Saint-Pierre-le-Viger (France, 2023) were spotted
+  in space as small asteroids hours before they hit, and pieces were found after.
 
 ## Map tiles
 
