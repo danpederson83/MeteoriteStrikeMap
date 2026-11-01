@@ -1,8 +1,8 @@
-import { CONFIG } from "./config.js";
+import { CONFIG } from "./config.js?v=2";
 import {
   KINDS, FAMOUS, LEARN_HTML, classNote, heatNote, massCompare, formatMass,
   CRATER_COLOR, CRATER_STORIES, formatDiameter, craterSizeCompare, formatAge, eraNote,
-} from "./kidfacts.js";
+} from "./kidfacts.js?v=2";
 
 const $ = (id) => document.getElementById(id);
 const THIS_YEAR = new Date().getFullYear();
