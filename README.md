@@ -15,12 +15,11 @@ if it's a famous one. Impact craters are on the map too.
   6 pineapples"), "how many years ago", and plain-language explanations of
   meteorite types.
 - **💥 190 impact craters** (brown rings) from the Earth Impact Database. Tap one
-  to see how wide it is ("it would take about 51 minutes to walk across"), how old
-  it is and what was living then ("Dinosaurs were alive then!"). A dashed circle
+  to see how wide it is ("it would take about 51 minutes to walk across"). A dashed circle
   shows the crater's real size on the map. Turn craters on or off under "Also show".
 - **⭐ Famous meteorites and craters** with short stories: Hoba, Chelyabinsk, the Alabama
   meteorite that hit a woman on her couch, the one that hit a car in New York, and
-  more. Famous craters include Chicxulub (the dinosaur one), Meteor Crater,
+  more. Famous craters include Chicxulub, Meteor Crater,
   Vredefort and the town built inside the Ries crater.
 - **📚 Learn** panel: meteoroid vs. meteor vs. meteorite, where they come from, and
   why so many are found in Antarctica.

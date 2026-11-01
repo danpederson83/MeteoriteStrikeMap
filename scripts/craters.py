@@ -1,6 +1,6 @@
 """Impact craters for the map. Used by build_data.py.
 
-The list of craters, their locations and ages come from the Earth Impact
+The list of craters and their locations come from the Earth Impact
 Database (EIDB), which is included in the Meteoritical Bulletin data as records
 with status "Crater". The EIDB has no diameters there, so those come from
 Wikipedia's "List of impact structures on Earth", plus a few hand-copied values
@@ -58,16 +58,6 @@ NOT_IN_WIKI_LIST = {
 }
 
 # Ages the EIDB copy gets wrong or leaves out (checked against Wikipedia).
-AGE_OVERRIDES = {
-    "Avak": "3-95 Ma",           # garbled as "34759 Ma"
-    "Chesapeake Bay": "35.3 ± 0.1 Ma",  # unit missing
-    "Kamil": "<5 Ka",            # blank
-    "Chicxulub": "66.05 ± 0.03 Ma",  # EIDB has the older 64.98 Ma estimate
-}
-
-UNIT = {"a": 1, "ka": 1e3, "ma": 1e6, "ga": 1e9}
-
-
 def _norm(s):
     s = unicodedata.normalize("NFKD", s).encode("ascii", "ignore").decode().lower()
     s = re.sub(r"\[.*?\]|\(.*?\)", "", s)
@@ -118,30 +108,17 @@ def fetch_wiki_rows():
     return rows
 
 
-def parse_age(text):
-    """Turn an EIDB age like "470 ± 30 Ma", "<0.1 Ma", "1640 - 600 Ma",
-    "49000 ± 3000 a" or "fell 1947" into {"q", "y", "y2"}:
-    q is "about", "lt" (less than), "gt" (more than), "range" or "fell";
-    y is the age in years (for "fell", the calendar year); y2 is the top of a range."""
-    t = (text or "").strip()
-    m = re.search(r"fell (\d{4})", t, re.I)
-    if m:
-        age = {"q": "fell", "y": int(m.group(1))}
-        if "poss" in t.lower():  # "poss. fell 1863"
-            age["maybe"] = True
-        return age
-    m = re.search(r"(?i)\b(a|ka|ma|ga)\s*$", t)
+def parse_fell(text):
+    """For craters people saw being made, the EIDB "age" says "fell 1947" (or
+    "poss. fell 1863"). Return {"y": 1947} / {"y": 1863, "maybe": True}, else None.
+    Other dates are left out on purpose: the site shows only recorded history."""
+    m = re.search(r"fell (\d{4})", text or "", re.I)
     if not m:
         return None
-    mult = UNIT[m.group(1).lower()]
-    nums = [float(n) for n in re.findall(r"\d+(?:\.\d+)?", t)]
-    if not nums:
-        return None
-    if "±" not in t and len(nums) == 2:  # a range, written either way round
-        lo, hi = sorted(nums)
-        return {"q": "range", "y": round(lo * mult), "y2": round(hi * mult)}
-    q = "lt" if t.startswith("<") else "gt" if t.startswith(">") else "about"
-    return {"q": q, "y": round(nums[0] * mult)}
+    fell = {"y": int(m.group(1))}
+    if "poss" in text.lower():
+        fell["maybe"] = True
+    return fell
 
 
 def build_craters(rows, wiki):
@@ -165,10 +142,7 @@ def build_craters(rows, wiki):
         if not diam:
             no_diam.append(eidb_name)
 
-        age = parse_age(AGE_OVERRIDES.get(eidb_name) or row.get("Year"))
-        if age is None:
-            print(f"  warning: can't read age of {eidb_name!r}: {row.get('Year')!r}", file=sys.stderr)
-
+        fell = parse_fell(row.get("Year"))
         place = (row.get("Place") or "").strip()
         features.append({
             "type": "Feature",
@@ -178,7 +152,7 @@ def build_craters(rows, wiki):
                 "name": DISPLAY_NAMES.get(eidb_name, eidb_name),
                 "place": place,
                 "diam": round(diam, 4) if diam else None,
-                "age": age,
+                "fell": fell,
                 "wiki": article,
             },
         })

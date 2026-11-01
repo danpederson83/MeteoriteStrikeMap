@@ -1,8 +1,8 @@
-import { CONFIG } from "./config.js?v=2";
+import { CONFIG } from "./config.js?v=3";
 import {
   KINDS, FAMOUS, LEARN_HTML, classNote, heatNote, massCompare, formatMass,
-  CRATER_COLOR, CRATER_STORIES, formatDiameter, craterSizeCompare, formatAge, eraNote,
-} from "./kidfacts.js?v=2";
+  CRATER_COLOR, CRATER_STORIES, formatDiameter, craterSizeCompare, formatFell,
+} from "./kidfacts.js?v=3";
 
 const $ = (id) => document.getElementById(id);
 const THIS_YEAR = new Date().getFullYear();
@@ -424,8 +424,7 @@ function showCraterDetails(f) {
   const [lon, lat] = f.geometry.coordinates;
   const story = CRATER_STORIES[p.name];
   const cmp = craterSizeCompare(p.diam);
-  const age = formatAge(p.age, THIS_YEAR);
-  const era = eraNote(p.age);
+  const fell = formatFell(p.fell, THIS_YEAR);
   const wiki = p.wiki
     ? `https://en.wikipedia.org/wiki/${encodeURIComponent(p.wiki.replace(/ /g, "_"))}`
     : `https://en.wikipedia.org/w/index.php?search=${encodeURIComponent(p.name + " crater")}`;
@@ -444,9 +443,8 @@ function showCraterDetails(f) {
       <dd><b>${esc(formatDiameter(p.diam))}</b>${cmp ? `<div class="sub">${esc(cmp)}${/^about/.test(cmp) ? "!" : "."}</div>` : ""}
         ${p.diam ? `<div class="sub">The dashed circle on the map shows its real size. Zoom in or out to compare it with towns and roads.</div>` : ""}</dd>
 
-      <dt>📅 When it was made</dt>
-      <dd><b>${esc(age.main)}</b>${age.sub ? `<div class="sub">${esc(age.sub)}</div>` : ""}
-        ${era ? `<div class="sub">${esc(era)}</div>` : ""}</dd>
+      ${fell ? `<dt>📅 When it was made</dt>
+      <dd><b>${esc(fell.main)}</b><div class="sub">${esc(fell.sub)}</div></dd>` : ""}
 
       <dt>🌍 Location</dt>
       <dd>${Math.abs(lat).toFixed(3)}° ${lat >= 0 ? "N" : "S"}, ${Math.abs(lon).toFixed(3)}° ${lon >= 0 ? "E" : "W"}</dd>
@@ -661,7 +659,7 @@ function openFamous() {
         return `<li><button data-crater="${p.id}">
           <span class="fam-emoji">💥</span>
           <span class="fam-main"><b>${esc(p.name)}</b>
-            <span class="sub">${esc(formatDiameter(p.diam))} wide · ${esc(formatAge(p.age, THIS_YEAR).main)}</span></span>
+            <span class="sub">${esc(formatDiameter(p.diam))} wide${p.fell ? ` · ${esc(formatFell(p.fell, THIS_YEAR).main)}` : ""}</span></span>
         </button></li>`;
       }).join("")}
     </ul>` : ""}`);
